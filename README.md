@@ -1,4 +1,4 @@
-# gql-rs-worker
+# juniper-graphql-worker
 
 High-performance GraphQL APIs powered by Rust and Cloudflare Workers.
 
@@ -6,7 +6,7 @@ High-performance GraphQL APIs powered by Rust and Cloudflare Workers.
 
 ## Overview
 
-gql-rs-worker combines the speed and safety of Rust with the global edge network of Cloudflare Workers to deliver a lightning-fast GraphQL API. This project uses the Juniper GraphQL library for Rust, Axum for HTTP routing, and the Cloudflare Workers platform for serverless deployment.
+juniper-graphql-worker combines the speed and safety of Rust with the global edge network of Cloudflare Workers to deliver a lightning-fast GraphQL API. This project uses the Juniper GraphQL library for Rust, Axum for HTTP routing, and the Cloudflare Workers platform for serverless deployment.
 
 ## Features
 
@@ -34,8 +34,8 @@ gql-rs-worker combines the speed and safety of Rust with the global edge network
 
 1. Clone the repository
    ```bash
-   git clone https://github.com/geoffsee/gql-rs-worker.git
-   cd gql-rs-worker
+   git clone https://github.com/geoffsee/juniper-graphql-worker.git
+   cd juniper-graphql-worker
    ```
 
 2. Install dependencies
