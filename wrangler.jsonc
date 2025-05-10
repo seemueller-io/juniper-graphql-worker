@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "compatibility_date": "2025-05-10",
+  "main": "build/worker/shim.mjs",
+  "name": "juniper-worker",
+  "dev": {
+    "port": 3000
+  },
+  "build": {
+    "command": "cargo install -q worker-build && worker-build --release"
+  }
+}
