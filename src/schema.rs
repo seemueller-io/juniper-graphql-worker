@@ -1,8 +1,5 @@
-use juniper::{
-    graphql_object, EmptySubscription, FieldError, FieldResult, GraphQLEnum, GraphQLInputObject,
-    GraphQLObject, Value,
-};
 use crate::{context, models};
+use juniper::{graphql_object, EmptySubscription, FieldError, FieldResult, Value};
 
 pub(crate) struct Query;
 
@@ -30,7 +27,10 @@ pub(crate) struct Mutation;
 #[graphql_object]
 #[graphql(context = context::Context)]
 impl Mutation {
-    fn create_human(new_human: models::NewHuman, context: &context::Context) -> FieldResult<models::Human> {
+    fn create_human(
+        new_human: models::NewHuman,
+        context: &context::Context,
+    ) -> FieldResult<models::Human> {
         let db = context
             .db
             .get_connection()

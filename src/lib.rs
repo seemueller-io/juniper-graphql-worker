@@ -1,7 +1,7 @@
-mod schema;
 mod context;
 mod database;
 mod models;
+mod schema;
 
 use crate::database::DatabasePool;
 use axum::extract::State;
@@ -26,8 +26,13 @@ async fn fetch(
 }
 
 #[worker::send]
-async fn graphql_server(State(state): State<AppState>, request: axum::extract::Request) -> impl IntoResponse {
-    let body = axum::body::to_bytes(request.into_body(), usize::MAX).await.unwrap();
+async fn graphql_server(
+    State(state): State<AppState>,
+    request: axum::extract::Request,
+) -> impl IntoResponse {
+    let body = axum::body::to_bytes(request.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let graphql_req: GraphQLRequest = serde_json::from_slice(&body).unwrap();
 
     // These are accessible inside the graphql resolvers
@@ -40,11 +45,16 @@ async fn graphql_server(State(state): State<AppState>, request: axum::extract::R
     let result = Ok(juniper::execute(
         graphql_req.query.as_str(),
         graphql_req.operation_name.as_deref(),
-        &schema::Schema::new(schema::Query, schema::Mutation, EmptySubscription::<context::Context>::new()),
+        &schema::Schema::new(
+            schema::Query,
+            schema::Mutation,
+            EmptySubscription::<context::Context>::new(),
+        ),
         &graphql_req.variables(),
         &ctx,
-    ).await.unwrap());
-    
+    )
+    .await
+    .unwrap());
 
     axum::Json(juniper::http::GraphQLResponse::from_result(result))
 }
@@ -59,7 +69,7 @@ async fn playground(State(state): State<AppState>) -> impl IntoResponse {
 
 #[derive(Clone)]
 struct AppState {
-    env: Env
+    env: Env,
 }
 
 impl AppState {
@@ -68,15 +78,15 @@ impl AppState {
     }
 }
 
-
 fn router(env: Env) -> Router {
     let app_state = AppState::new(env);
 
-    Router::new().route("/", get(homepage))
-    .route("/playground", get(playground))
-    .route("/graphql", get(graphql_server))
-    .route("/graphql", post(graphql_server))
-    .with_state(app_state)
+    Router::new()
+        .route("/", get(homepage))
+        .route("/playground", get(playground))
+        .route("/graphql", get(graphql_server))
+        .route("/graphql", post(graphql_server))
+        .with_state(app_state)
 }
 
 async fn homepage() -> axum::response::Html<&'static str> {

@@ -18,13 +18,16 @@ impl DatabaseConnection {
             appears_in: vec![
                 models::Episode::NewHope,
                 models::Episode::Empire,
-                models::Episode::Jedi
+                models::Episode::Jedi,
             ],
             home_planet: "Tatooine".to_string(),
         })
     }
 
-    pub(crate) fn insert_human(&self, new_human: &models::NewHuman) -> Result<models::Human, &'static str> {
+    pub(crate) fn insert_human(
+        &self,
+        new_human: &models::NewHuman,
+    ) -> Result<models::Human, &'static str> {
         Ok(models::Human {
             id: "generated-id".to_string(),
             name: new_human.name.clone(),
