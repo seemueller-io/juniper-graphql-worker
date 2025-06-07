@@ -36,10 +36,18 @@ async fn graphql_server(
     let graphql_req: GraphQLRequest = serde_json::from_slice(&body).unwrap();
 
     // These are accessible inside the graphql resolvers
+    #[cfg(not(test))]
     let ctx = context::Context {
         // hardcoded simple api
         db: DatabasePool,
         env: state.env.clone(),
+    };
+
+    #[cfg(test)]
+    let ctx = context::Context {
+        // hardcoded simple api
+        db: DatabasePool,
+        env: Some(state.env.clone()),
     };
 
     let result = Ok(juniper::execute(
@@ -95,4 +103,50 @@ async fn homepage() -> axum::response::Html<&'static str> {
            <div>visit <a href=\"/playground\">GraphQL Playground</a></div>\
     </html>"
         .into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{Episode, NewHuman};
+    use crate::schema::test_helpers;
+    use juniper::Value;
+
+    #[test]
+    fn test_api_version() {
+        // Test the api_version query using the test helper
+        let version = test_helpers::test_api_version();
+        assert_eq!(version, "1.0");
+    }
+
+    #[test]
+    fn test_human_query() {
+        // Test the human query using the test helper
+        let result = test_helpers::test_human_query("1".to_string());
+
+        assert!(result.is_ok());
+        let human = result.unwrap();
+        assert_eq!(human.id, "1");
+        assert_eq!(human.name, "Luke Skywalker");
+        assert_eq!(human.home_planet, "Tatooine");
+    }
+
+    #[test]
+    fn test_create_human_mutation() {
+        // Create a new human
+        let new_human = NewHuman {
+            name: "Han Solo".to_string(),
+            appears_in: vec![Episode::NewHope, Episode::Empire, Episode::Jedi],
+            home_planet: "Corellia".to_string(),
+        };
+
+        // Test the create_human mutation using the test helper
+        let result = test_helpers::test_create_human_mutation(new_human);
+
+        assert!(result.is_ok());
+        let human = result.unwrap();
+        assert_eq!(human.id, "generated-id");
+        assert_eq!(human.name, "Han Solo");
+        assert_eq!(human.home_planet, "Corellia");
+    }
 }

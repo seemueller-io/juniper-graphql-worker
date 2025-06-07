@@ -36,3 +36,54 @@ impl DatabaseConnection {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{Episode, NewHuman};
+
+    #[test]
+    fn test_get_connection() {
+        let pool = DatabasePool;
+        let connection_result = pool.get_connection();
+
+        // Verify that we can get a connection successfully
+        assert!(connection_result.is_ok());
+    }
+
+    #[test]
+    fn test_find_human() {
+        let connection = DatabaseConnection;
+        let human_result = connection.find_human("1");
+
+        // Verify that we can find a human successfully
+        assert!(human_result.is_ok());
+
+        let human = human_result.unwrap();
+        assert_eq!(human.id, "1");
+        assert_eq!(human.name, "Luke Skywalker");
+        assert_eq!(human.appears_in.len(), 3);
+        assert_eq!(human.home_planet, "Tatooine");
+    }
+
+    #[test]
+    fn test_insert_human() {
+        let connection = DatabaseConnection;
+        let new_human = NewHuman {
+            name: "Han Solo".to_string(),
+            appears_in: vec![Episode::NewHope, Episode::Empire, Episode::Jedi],
+            home_planet: "Corellia".to_string(),
+        };
+
+        let human_result = connection.insert_human(&new_human);
+
+        // Verify that we can insert a human successfully
+        assert!(human_result.is_ok());
+
+        let human = human_result.unwrap();
+        assert_eq!(human.id, "generated-id");
+        assert_eq!(human.name, "Han Solo");
+        assert_eq!(human.appears_in.len(), 3);
+        assert_eq!(human.home_planet, "Corellia");
+    }
+}
