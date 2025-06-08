@@ -88,13 +88,15 @@ async fn graphql_server(
         .unwrap();
     let graphql_req: GraphQLRequest = serde_json::from_slice(&body).unwrap();
 
-    // These are accessible inside the graphql resolvers
+
+    #[cfg(not(test))]
     let ctx = context::Context {
         // hardcoded simple api
         db: DatabasePool,
         env: state.env.clone(),
     };
-
+    
+    #[cfg(not(test))]
     let result = Ok(juniper::execute(
         graphql_req.query.as_str(),
         graphql_req.operation_name.as_deref(),
@@ -109,6 +111,7 @@ async fn graphql_server(
     .await
     .unwrap());
 
+    #[cfg(not(test))]
     axum::Json(juniper::http::GraphQLResponse::from_result(result))
 }
 
