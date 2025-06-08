@@ -1,6 +1,7 @@
 {
   "scripts": {
-    "dev": "bunx wrangler dev"
+    "dev": "bunx wrangler dev",
+    "test:coverage": "cargo llvm-cov test"
   },
   "dependencies": {
     "wrangler": "^4.14.4"

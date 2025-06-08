@@ -164,18 +164,26 @@ pub struct RouterConfig {
 }
 
 // WebSocket handler for GraphQL subscriptions
-#[cfg(not(test))]
+
 async fn graphql_subscriptions(
     State(state): State<AppState>,
     ws: WebSocketUpgrade,
 ) -> impl IntoResponse {
     ws.on_upgrade(move |mut socket| async move {
         // Create a context for the subscription
-        
+
+        #[cfg(not(test))]
         let ctx = context::Context {
             db: DatabasePool,
             env: state.env.clone(),
         };
+
+        #[cfg(test)]
+        let ctx = context::Context {
+            db: DatabasePool,
+            env: Some(CustomEnv::new()),
+        };
+
 
         // Create a schema
         let schema = schema::Schema::new(
