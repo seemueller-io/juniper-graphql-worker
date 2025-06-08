@@ -1,10 +1,15 @@
-use crate::database;
+use crate::{database, CustomEnv};
 use worker::Env;
+
 
 pub struct Context {
     pub(crate) db: database::DatabasePool,
+    #[cfg(feature = "local")]
+    pub(crate) env: CustomEnv,
     #[cfg(not(test))]
+    #[cfg(not(feature = "local"))]
     pub(crate) env: Env,
+    #[cfg(not(feature = "local"))]
     #[cfg(test)]
     pub(crate) env: Option<Env>,
 }

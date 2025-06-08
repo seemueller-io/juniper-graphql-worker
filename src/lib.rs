@@ -10,11 +10,14 @@ use axum::routing::post;
 use axum::{routing::get, Router};
 use juniper::http::graphiql::graphiql_source;
 use juniper::http::GraphQLRequest;
-use juniper::EmptySubscription;
+use juniper::{EmptySubscription, Value};
+use std::net::{SocketAddr, TcpListener};
 use tower_service::Service;
+use worker::wasm_bindgen::JsCast;
 use worker::wasm_bindgen::__rt::IntoJsResult;
 use worker::*;
 
+#[cfg(not(feature = "local"))]
 #[event(fetch)]
 async fn fetch(
     req: HttpRequest,
@@ -22,7 +25,57 @@ async fn fetch(
     _ctx: Context,
 ) -> Result<axum::http::Response<axum::body::Body>> {
     console_error_panic_hook::set_once();
-    Ok(router(_env).call(req).await?)
+    Ok(router(RouterConfig { env: _env }).call(req).await?)
+}
+
+#[derive(Clone)]
+struct CustomEnv {
+    inner: std::collections::HashMap<String, String>,
+}
+
+impl CustomEnv {
+    fn new() -> Self {
+        let mut env = std::collections::HashMap::new();
+        env.insert(
+            "DATABASE_URL".to_string(),
+            "postgres://localhost:5432/db".to_string(),
+        );
+        env.insert("API_KEY".to_string(), "test-key".to_string());
+        Self { inner: env }
+    }
+}
+
+#[cfg(feature = "local")]
+#[tokio::main]
+async fn main() {
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .init();
+
+    let env = CustomEnv::new();
+    let state = AppState::new(env);
+
+    #[cfg(not(test))]
+    let ctx = context::Context {
+        db: DatabasePool,
+        env: state.env.clone(),
+    };
+
+    let router_config = RouterConfig {
+        env: state.env.clone(),
+    };
+
+    let app = router(router_config);
+
+    let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
+
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+
+    tracing::info!("listening on {addr}");
+
+    axum::serve(listener, app)
+        .await
+        .unwrap_or_else(|e| panic!("failed to run `axum::serve`: {e}"));
 }
 
 #[worker::send]
@@ -36,18 +89,10 @@ async fn graphql_server(
     let graphql_req: GraphQLRequest = serde_json::from_slice(&body).unwrap();
 
     // These are accessible inside the graphql resolvers
-    #[cfg(not(test))]
     let ctx = context::Context {
         // hardcoded simple api
         db: DatabasePool,
         env: state.env.clone(),
-    };
-
-    #[cfg(test)]
-    let ctx = context::Context {
-        // hardcoded simple api
-        db: DatabasePool,
-        env: Some(state.env.clone()),
     };
 
     let result = Ok(juniper::execute(
@@ -75,19 +120,41 @@ async fn playground(State(state): State<AppState>) -> impl IntoResponse {
         .unwrap()
 }
 
+#[cfg(feature = "local")]
+#[derive(Clone)]
+struct AppState {
+    env: CustomEnv,
+}
+
+#[cfg(not(feature = "local"))]
 #[derive(Clone)]
 struct AppState {
     env: Env,
 }
 
 impl AppState {
+    #[cfg(feature = "local")]
+    pub fn new(env: CustomEnv) -> Self {
+        Self { env }
+    }
+    #[cfg(not(feature = "local"))]
     pub fn new(env: Env) -> Self {
         Self { env }
     }
 }
 
-fn router(env: Env) -> Router {
-    let app_state = AppState::new(env);
+#[cfg(feature = "local")]
+pub struct RouterConfig {
+    pub env: CustomEnv,
+}
+
+#[cfg(not(feature = "local"))]
+pub struct RouterConfig {
+    pub env: Env,
+}
+
+fn router(config: RouterConfig) -> Router {
+    let app_state = AppState::new(config.env);
 
     Router::new()
         .route("/", get(homepage))
