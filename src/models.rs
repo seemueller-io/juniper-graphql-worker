@@ -7,7 +7,7 @@ pub enum Episode {
     Jedi,
 }
 
-#[derive(GraphQLObject)]
+#[derive(GraphQLObject,Clone)]
 #[graphql(description = "A humanoid creature in the Star Wars universe")]
 pub struct Human {
     pub(crate) id: String,

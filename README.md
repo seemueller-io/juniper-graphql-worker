@@ -16,9 +16,7 @@ juniper-graphql-worker combines the speed and safety of Rust with the global edg
 - **Interactive Tools**
 - **Type Safety**
 - **Modular Design**
-
-## Not implemented
-- **Websocket Subscriptions** (Planned) - (A Cloudflare-specific Websocket implementation is required)
+- **WebSocket Subscriptions** - Real-time updates via GraphQL subscriptions
 
 ## Getting Started
 
@@ -49,6 +47,8 @@ juniper-graphql-worker combines the speed and safety of Rust with the global edg
    ```
 
 4. Navigate to `http://localhost:3000/playground` to interact with the GraphQL API
+   - Queries and mutations are available at `http://localhost:3000/graphql`
+   - Subscriptions are available at `http://localhost:3000/subscriptions`
 
 > **Optional**: Deploy this api to the internet `bunx wrangler deploy`
 
@@ -59,11 +59,13 @@ juniper-graphql-worker combines the speed and safety of Rust with the global edg
     - `context.rs` - GraphQL context setup
     - `database.rs` - Database connection and operations
     - `models.rs` - GraphQL object and input type definitions
-    - `schema.rs` - GraphQL schema with queries and mutations
+    - `schema.rs` - GraphQL schema with queries, mutations, and subscriptions
 
 ## API Example
 
-This GraphQL API implements a Star Wars-themed data model. Here's an example query:
+This GraphQL API implements a Star Wars-themed data model. Queries and mutations are available at the `/graphql` endpoint, and subscriptions are available at the `/subscriptions` endpoint.
+
+Here's an example query:
 
 ```graphql
 query {
@@ -93,6 +95,23 @@ mutation {
   }
 }
 ```
+
+And an example subscription:
+
+```graphql
+subscription {
+  humanCreated {
+    id
+    name
+    homePlanet
+    appearsIn
+  }
+}
+```
+
+Note: The actual field name in the schema is `human_created`, but GraphQL converts it to camelCase in the client.
+
+The subscription will receive updates whenever a new human is created using the `createHuman` mutation.
 
 ## Deployment
 
@@ -127,7 +146,9 @@ Rust's efficiency combined with Cloudflare's edge network provides:
 
 - **Rust** - Systems programming language
 - **Juniper** - GraphQL server library for Rust
-- **Axum** - Web framework for Rust
+- **Juniper Subscriptions** - GraphQL subscriptions support for Juniper
+- **Juniper GraphQL WS** - WebSocket transport for GraphQL subscriptions
+- **Axum** - Web framework for Rust with WebSocket support
 - **Cloudflare Workers** - Serverless edge computing platform
 - **Wrangler** - CLI tool for Cloudflare Workers
 
@@ -148,6 +169,8 @@ This project is licensed under the MIT License
 ## Acknowledgments
 
 - [Juniper](https://github.com/graphql-rust/juniper) - GraphQL server library for Rust
+- [Juniper Subscriptions](https://github.com/graphql-rust/juniper/tree/master/juniper_subscriptions) - GraphQL subscriptions support for Juniper
+- [Juniper GraphQL WS](https://github.com/graphql-rust/juniper/tree/master/juniper_graphql_ws) - WebSocket transport for GraphQL subscriptions
 - [Axum](https://github.com/tokio-rs/axum) - Web application framework for Rust
 - [Cloudflare Workers](https://workers.cloudflare.com/) - Serverless platform
 

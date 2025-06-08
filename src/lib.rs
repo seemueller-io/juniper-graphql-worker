@@ -3,15 +3,18 @@ mod database;
 mod models;
 mod schema;
 
+use juniper_subscriptions::Coordinator;
 use crate::database::DatabasePool;
-use axum::extract::State;
+use axum::extract::{State, WebSocketUpgrade};
 use axum::response::IntoResponse;
 use axum::routing::post;
 use axum::{routing::get, Router};
+use futures::StreamExt;
 use juniper::http::graphiql::graphiql_source;
 use juniper::http::GraphQLRequest;
-use juniper::{EmptySubscription, Value};
+use juniper::{DefaultScalarValue, ExecutionError, GraphQLError, SubscriptionCoordinator, Value};
 use std::net::{SocketAddr, TcpListener};
+use std::time::Duration;
 use tower_service::Service;
 use worker::wasm_bindgen::JsCast;
 use worker::wasm_bindgen::__rt::IntoJsResult;
@@ -88,22 +91,27 @@ async fn graphql_server(
         .unwrap();
     let graphql_req: GraphQLRequest = serde_json::from_slice(&body).unwrap();
 
-
     #[cfg(not(test))]
     let ctx = context::Context {
         // hardcoded simple api
         db: DatabasePool,
         env: state.env.clone(),
     };
-    
-    #[cfg(not(test))]
-    let result = Ok(juniper::execute(
+
+    #[cfg(test)]
+    let ctx = context::Context {
+        // hardcoded simple api
+        db: DatabasePool,
+        env: Some(CustomEnv::new()),
+    };
+
+    let result: std::result::Result<(Value, Vec<ExecutionError<DefaultScalarValue>>), GraphQLError> = Ok(juniper::execute(
         graphql_req.query.as_str(),
         graphql_req.operation_name.as_deref(),
         &schema::Schema::new(
             schema::Query,
             schema::Mutation,
-            EmptySubscription::<context::Context>::new(),
+            schema::Subscription,
         ),
         &graphql_req.variables(),
         &ctx,
@@ -111,7 +119,6 @@ async fn graphql_server(
     .await
     .unwrap());
 
-    #[cfg(not(test))]
     axum::Json(juniper::http::GraphQLResponse::from_result(result))
 }
 
@@ -119,7 +126,7 @@ async fn graphql_server(
 async fn playground(State(state): State<AppState>) -> impl IntoResponse {
     axum::http::Response::builder()
         .header("content-type", "text/html")
-        .body(String::from(graphiql_source("/graphql", None)))
+        .body(String::from(graphiql_source("/graphql", Some("/subscriptions"))))
         .unwrap()
 }
 
@@ -156,6 +163,76 @@ pub struct RouterConfig {
     pub env: Env,
 }
 
+// WebSocket handler for GraphQL subscriptions
+#[cfg(not(test))]
+async fn graphql_subscriptions(
+    State(state): State<AppState>,
+    ws: WebSocketUpgrade,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |mut socket| async move {
+        // Create a context for the subscription
+        
+        let ctx = context::Context {
+            db: DatabasePool,
+            env: state.env.clone(),
+        };
+
+        // Create a schema
+        let schema = schema::Schema::new(
+            schema::Query,
+            schema::Mutation,
+            schema::Subscription,
+        );
+
+        // Create a coordinator for handling subscriptions
+        let coordinator = Coordinator::new(schema);
+
+        // Simple ping-pong keep-alive
+        let keep_alive_interval = Duration::from_secs(15);
+        let keep_alive = tokio::time::interval(keep_alive_interval);
+        tokio::pin!(keep_alive);
+
+        // Handle the WebSocket connection
+        loop {
+            tokio::select! {
+                // Handle WebSocket messages
+                Some(msg) = socket.recv() => {
+                    if let Ok(msg) = msg {
+                        if let axum::extract::ws::Message::Text(text) = msg {
+                            // Parse the GraphQL subscription request
+                            if let Ok(request) = serde_json::from_str::<juniper::http::GraphQLRequest>(&text) {
+                                // Execute the subscription
+                                let operation_name = request.operation_name.as_deref();
+                                let variables = request.variables();
+
+                                if let Ok(stream) = coordinator.subscribe(&request, &ctx).await {
+                                    // Send subscription updates to the client
+                                    let mut stream = stream;
+                                    while let Some(result) = stream.next().await {
+                                        let response = serde_json::to_string(&result).unwrap();
+                                        if socket.send(axum::extract::ws::Message::Text(response)).await.is_err() {
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Client disconnected
+                        break;
+                    }
+                }
+                // Send keep-alive ping
+                _ = keep_alive.tick() => {
+                    if socket.send(axum::extract::ws::Message::Ping(vec![])).await.is_err() {
+                        break;
+                    }
+                }
+            }
+        }
+    })
+}
+
 fn router(config: RouterConfig) -> Router {
     let app_state = AppState::new(config.env);
 
@@ -164,6 +241,7 @@ fn router(config: RouterConfig) -> Router {
         .route("/playground", get(playground))
         .route("/graphql", get(graphql_server))
         .route("/graphql", post(graphql_server))
+        .route("/subscriptions", get(graphql_subscriptions))
         .with_state(app_state)
 }
 
@@ -171,6 +249,7 @@ async fn homepage() -> axum::response::Html<&'static str> {
     "<html><h1>juniper_axum/custom example</h1>\
            <div>visit <a href=\"/graphiql\">GraphiQL</a></div>\
            <div>visit <a href=\"/playground\">GraphQL Playground</a></div>\
+           <div>GraphQL Subscriptions are available at <code>/subscriptions</code></div>\
     </html>"
         .into()
 }
