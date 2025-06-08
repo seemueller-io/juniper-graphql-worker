@@ -7,13 +7,27 @@ use crate::database::DatabasePool;
 use axum::extract::State;
 use axum::response::IntoResponse;
 use axum::routing::post;
-use axum::{routing::get, Router};
+use axum::{http, routing::get, Router};
 use juniper::http::graphiql::graphiql_source;
 use juniper::http::GraphQLRequest;
 use juniper::EmptySubscription;
 use tower_service::Service;
 use worker::wasm_bindgen::__rt::IntoJsResult;
+use futures::StreamExt;
 use worker::*;
+use axum::http::header;
+
+fn is_valid_ws_upgrade(req: &HttpRequest) -> bool {
+    if let Some(upgrade_value) = req.headers().get(header::UPGRADE) {
+        if upgrade_value.to_str().map(|v| v.eq_ignore_ascii_case("websocket")).unwrap_or(false) {
+            if let Some(connection_value) = req.headers().get(header::CONNECTION) {
+                let conn_str = connection_value.to_str().unwrap_or("").to_lowercase();
+                return conn_str.contains("upgrade");
+            }
+        }
+    }
+    false
+}
 
 #[event(fetch)]
 async fn fetch(
@@ -22,8 +36,44 @@ async fn fetch(
     _ctx: Context,
 ) -> Result<axum::http::Response<axum::body::Body>> {
     console_error_panic_hook::set_once();
-    Ok(router(_env).call(req).await?)
+
+    if is_valid_ws_upgrade(&req) {
+        // Create the server / client pair Cloudflare expects.
+        let pair = WebSocketPair::new()?;
+        let mut server = pair.server;
+        let client     = pair.client;
+
+        // Accept the connection on the server side.
+        server.accept()?;
+
+        // Spawn an async task that handles this socket.
+        wasm_bindgen_futures::spawn_local(async move {
+            let mut event_stream = server.events().expect("could not open stream");
+            while let Some(event) = event_stream.next().await {
+                match event.expect("received error in websocket") {
+                    WebsocketEvent::Message(msg) => server.send(&msg.text()).unwrap(),
+                    WebsocketEvent::Close(event) => console_log!("{:?}", event),
+                }
+            }
+        });
+
+        // Build the response that initiates the upgrade.
+        let mut cf_resp = Response::from_websocket(client)?;
+        // Optional: add CORS or any other headers you want.
+        cf_resp
+            .headers_mut()
+            .append("Access-Control-Allow-Origin", "*").expect("TODO: panic message");
+
+        // Convert the Cloudflare `worker::Response` into the type that
+        // `fetch` promises to return (`axum::http::Response<Body>`).
+        let axum_resp: axum::http::Response<axum::body::Body> = cf_resp.try_into().unwrap();
+        return Ok(axum_resp);
+    }
+
+    Ok(router(_env).call(req).await?.into_response())
 }
+
+
 
 #[worker::send]
 async fn graphql_server(
