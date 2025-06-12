@@ -11,6 +11,7 @@ use axum::{routing::get, Router};
 use juniper::http::graphiql::graphiql_source;
 use juniper::http::GraphQLRequest;
 use juniper::EmptySubscription;
+use juniper::http::playground::playground_source;
 use tower_service::Service;
 use worker::wasm_bindgen::__rt::IntoJsResult;
 use worker::*;
@@ -71,6 +72,13 @@ async fn graphql_server(
 async fn playground(State(state): State<AppState>) -> impl IntoResponse {
     axum::http::Response::builder()
         .header("content-type", "text/html")
+        .body(String::from(playground_source("/graphql", None)))
+        .unwrap()
+}
+// serves a web gui to interact with the api
+async fn graphiql(State(state): State<AppState>) -> impl IntoResponse {
+    axum::http::Response::builder()
+        .header("content-type", "text/html")
         .body(String::from(graphiql_source("/graphql", None)))
         .unwrap()
 }
@@ -92,6 +100,7 @@ fn router(env: Env) -> Router {
     Router::new()
         .route("/", get(homepage))
         .route("/playground", get(playground))
+        .route("/graphiql", get(graphiql))
         .route("/graphql", get(graphql_server))
         .route("/graphql", post(graphql_server))
         .with_state(app_state)
